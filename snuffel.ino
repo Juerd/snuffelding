@@ -19,6 +19,7 @@ const int buttonpin  = 15;
 const int i2c_sda = 23;
 const int i2c_scl = 13;
 const int ledpin = 26;
+int brightness;
 
 NeoPixelBus<NeoGrbwFeature, Neo800KbpsMethod> led(1, ledpin);
 MQTTClient mqtt;
@@ -28,6 +29,27 @@ bool add_units;
 void retain(String topic, String message) {
     Serial.printf("%s %s\n", topic.c_str(), message.c_str());
     mqtt.publish(topic, message, true, 0);
+}
+
+void led_off() { 
+    led.ClearTo(RgbwColor(0, 0, 0, 0));
+    led.Show();
+}
+
+void ledstatus_connecting() { 
+    led.ClearTo(RgbwColor(0, 0, abs(sin(.001 * millis())*brightness), 0));
+    led.Show();
+}
+
+void ledstatus_portal() {
+    if (!brightness) brightness = 80;
+    led.ClearTo(RgbwColor(abs(sin(.001 * millis())*2*brightness), abs(cos(.001 * millis())*brightness), 0, 0));
+    led.Show();
+}
+
+void ledstatus_idle() {
+    led.ClearTo(RgbwColor(0,0,0,brightness/4));
+    led.Show();
 }
 
 #define FN function<void()>
@@ -183,8 +205,7 @@ void setup() {
     pinMode(buttonpin, INPUT);
 
     led.Begin();
-    led.ClearTo(RgbwColor(0,0,255,0));
-    led.Show();
+    led_off();
 
     setup_sensors();
 
@@ -192,6 +213,7 @@ void setup() {
     int port      = WiFiSettings.integer("mqtt_port", 0, 65535, 1883, "MQTT broker TCP port");
     topic_prefix  = WiFiSettings.string("snuffelaar_mqtt_prefix", "snuffelaar/", "MQTT topic prefix (ending with '/' strongly advised)");
     add_units     = WiFiSettings.checkbox("snuffelaar_add_units", true, "Add units of measurement to MQTT messages");
+    brightness    = WiFiSettings.integer("snuffelaar_brightness", 0, 255, 80, "Brightness for startup and idle LED");
 
     for (auto& s : snuffels) {
         String label = "Enable " + s.id + " " + s.description;
@@ -201,18 +223,15 @@ void setup() {
 
     WiFiSettings.onWaitLoop = []() {
         check_button();
-        led.ClearTo(RgbwColor(0, 0, abs(sin(.001 * millis())*255), 0));
-        led.Show();
+        ledstatus_connecting();
         return 50;
     };
     WiFiSettings.onPortalWaitLoop = []() {
-        led.ClearTo(RgbwColor(abs(cos(.001 * millis())*255), abs(.3*sin(.001 * millis())*255), 0, 0));
-        led.Show();
+        ledstatus_portal();
+
     };
     if (!WiFiSettings.connect(false)) ESP.restart();
-
-    led.ClearTo(RgbwColor(0,0,0,20));
-    led.Show();
+    ledstatus_idle();
 
     for (auto& s : snuffels) if (s.enabled && s.init) s.init();
 
