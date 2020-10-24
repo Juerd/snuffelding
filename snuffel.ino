@@ -1,24 +1,26 @@
+#define Sprintf(f, ...) ({ char* s; asprintf(&s, f, __VA_ARGS__); String r = s; free(s); r; })
 #include <OneWire.h>
 #include <DallasTemperature.h>
 #include <WiFi.h>
 #include <SPIFFS.h>
 #include <WiFiSettings.h>
 #include <MQTT.h>
-#include <list>
 #include <PMS.h>
 #include <MHZ19.h>
 #include <Wire.h>
 #include <Adafruit_BME280.h>
-
+#include <NeoPixelBus.h>
+#include <math.h>
+#include <list>
 using namespace std;
-
-#define Sprintf(f, ...) ({ char* s; asprintf(&s, f, __VA_ARGS__); String r = s; free(s); r; })
 
 const int interval = 5000;
 const int buttonpin  = 15;
 const int i2c_sda = 23;
 const int i2c_scl = 13;
+const int ledpin = 26;
 
+NeoPixelBus<NeoRgbwFeature, Neo800KbpsMethod> led(1, ledpin);
 MQTTClient mqtt;
 String topic_prefix;
 bool add_units;
@@ -180,6 +182,10 @@ void setup() {
     Wire.begin(i2c_sda, i2c_scl);
     pinMode(buttonpin, INPUT);
 
+    led.Begin();
+    led.ClearTo(RgbwColor(0,0,255,0));
+    led.Show();
+
     setup_sensors();
 
     String server = WiFiSettings.string("mqtt_server", 64, "test.mosquitto.org", "MQTT broker");
@@ -195,9 +201,14 @@ void setup() {
 
     WiFiSettings.onWaitLoop = []() {
         check_button();
+        led.ClearTo(RgbwColor(0, 0, abs(sin(millis())*255), 0));
+        led.Show();
         return 50;
     };
     if (!WiFiSettings.connect(false)) ESP.restart();
+
+    led.ClearTo(RgbwColor(0,0,0,50));
+    led.Show();
 
     for (auto& s : snuffels) if (s.enabled && s.init) s.init();
 
