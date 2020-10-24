@@ -7,6 +7,8 @@
 #include <list>
 #include <PMS.h>
 #include <MHZ19.h>
+#include <Wire.h>
+#include <Adafruit_BME280.h>
 
 using namespace std;
 
@@ -14,6 +16,8 @@ using namespace std;
 
 const int interval = 5000;
 const int buttonpin  = 15;
+const int i2c_sda = 23;
+const int i2c_scl = 13;
 
 MQTTClient mqtt;
 String topic_prefix;
@@ -32,7 +36,7 @@ struct SnuffelSensor {
     String  description;
     String  topic_suffix;
     FN      init;
-    FN      request;
+    FN      prepare;
     LM      fetch;
 
     void publish(list<pair<const char*, String>> mapping, String value, String unit) {
@@ -49,7 +53,8 @@ list<SnuffelSensor> snuffels;
 
 void setup_sensors() {
     {
-        static OneWire ds(4);
+        static int gpio = 4;
+        static OneWire ds(gpio);
         static DallasTemperature sensors(&ds);
 
         struct SnuffelSensor s = {
@@ -61,7 +66,7 @@ void setup_sensors() {
                 sensors.begin();
                 sensors.setWaitForConversion(false);
             },
-            request: []() {
+            prepare: []() {
                 sensors.requestTemperatures();
             },
             fetch: [](SnuffelSensor& self) {
@@ -81,6 +86,7 @@ void setup_sensors() {
     {
         static HardwareSerial hwserial(2);
         static MHZ19 mhz;
+        static int rx = 22, tx = 21;
 
         struct SnuffelSensor s = {
             enabled: false,  // enabled by default via WiFiSettings
@@ -88,13 +94,11 @@ void setup_sensors() {
             description: "CO2 sensor",
             topic_suffix: "co2",
             init: []() {
-                hwserial.begin(9600, SERIAL_8N1, 22, 21);
+                hwserial.begin(9600, SERIAL_8N1, rx, tx);
                 mhz.begin(hwserial);
                 mhz.autoCalibration();
             },
-            request: []() {
-                // empty
-            },
+            prepare: NULL,
             fetch: [](SnuffelSensor& self) {
                 int CO2 = mhz.getCO2();
                 self.publish(String(CO2), "PPM");
@@ -107,6 +111,7 @@ void setup_sensors() {
         static HardwareSerial hwserial(1);
         static PMS pms(hwserial);
         static PMS::DATA data;
+        static int rx = 25, tx = 32;
 
         struct SnuffelSensor s = {
             enabled: false,  // enabled by default via WiFiSettings
@@ -114,10 +119,10 @@ void setup_sensors() {
             description: "dust sensor",
             topic_suffix: "dust/PM{size}",
             init: []() {
-                hwserial.begin(9600, SERIAL_8N1, 25, 32);
+                hwserial.begin(9600, SERIAL_8N1, rx, tx);
                 pms.passiveMode();
             },
-            request: []() {
+            prepare: []() {
                 pms.requestRead();
             },
             fetch: [](SnuffelSensor& self) {
@@ -128,6 +133,37 @@ void setup_sensors() {
             }
         };
         snuffels.push_back(s);
+    }
+
+    {
+        static Adafruit_BME280 bme;  // repeated .begin()s seems to be fine
+        static int i2c_address = 0x76;
+
+        struct SnuffelSensor rh = {
+            enabled: false,  // enabled by default via WiFiSettings
+            id: "BME280_RH",
+            description: "relative humidity sensor",
+            topic_suffix: "humidity",
+            init: []() { bme.begin(i2c_address); },
+            prepare: NULL,
+            fetch: [](SnuffelSensor& self) {
+                self.publish(String(bme.readHumidity()), "%");
+            }
+        };
+        snuffels.push_back(rh);
+
+        struct SnuffelSensor bp = {
+            enabled: false,  // enabled by default via WiFiSettings
+            id: "BME280_BP",
+            description: "barometric pressure sensor",
+            topic_suffix: "pressure",
+            init: []() { bme.begin(i2c_address); },
+            prepare: NULL,
+            fetch: [](SnuffelSensor& self) {
+                self.publish(String(bme.readPressure() / 100.0F), "hPa");
+            }
+        };
+        snuffels.push_back(bp);
     }
 }
 
@@ -141,6 +177,7 @@ void check_button() {
 void setup() {
     Serial.begin(115200);
     SPIFFS.begin(true);
+    Wire.begin(i2c_sda, i2c_scl);
     pinMode(buttonpin, INPUT);
 
     setup_sensors();
@@ -162,7 +199,7 @@ void setup() {
     };
     if (!WiFiSettings.connect(false)) ESP.restart();
 
-    for (auto& s : snuffels) if (s.enabled) s.init();
+    for (auto& s : snuffels) if (s.enabled && s.init) s.init();
 
     static WiFiClient wificlient;
     mqtt.begin(server.c_str(), port, wificlient);
@@ -178,8 +215,8 @@ void loop() {
         if (!mqtt.connect("")) delay(500);
     }
 
-    for (auto& s : snuffels) if (s.enabled) s.request();
-    for (auto& s : snuffels) if (s.enabled) s.fetch(s);
+    for (auto& s : snuffels) if (s.enabled && s.prepare) s.prepare();
+    for (auto& s : snuffels) if (s.enabled && s.fetch)   s.fetch(s);
 
     while (millis() < start + interval) check_button();
 }
