@@ -203,9 +203,6 @@ void setup() {
 
     static WiFiClient wificlient;
     mqtt.begin(server.c_str(), port, wificlient);
-
-
-    // 0x76 bme begin
 }
 
 void loop() {
