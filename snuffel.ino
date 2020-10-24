@@ -211,7 +211,7 @@ void setup() {
     };
     if (!WiFiSettings.connect(false)) ESP.restart();
 
-    led.ClearTo(RgbwColor(0,0,0,50));
+    led.ClearTo(RgbwColor(0,0,0,20));
     led.Show();
 
     for (auto& s : snuffels) if (s.enabled && s.init) s.init();
