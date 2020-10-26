@@ -120,12 +120,14 @@ void setup_sensors() {
             init: []() {
                 hwserial.begin(9600, SERIAL_8N1, rx, tx);
                 mhz.begin(hwserial);
+                mhz.setFilter(true, true); // Filter out erroneous readings (set to 0)
                 mhz.autoCalibration();
             },
             prepare: NULL,
             fetch: [](SnuffelSensor& self) {
                 int CO2 = mhz.getCO2();
-                self.publish(String(CO2), "PPM");
+                if (CO2)
+                    self.publish(String(CO2), "PPM");
             }
         };
         snuffels.push_back(s);
