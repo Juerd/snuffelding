@@ -14,7 +14,7 @@
 #include <list>
 using namespace std;
 
-const int interval = 5000;
+unsigned long interval;
 const int buttonpin  = 15;
 const int i2c_sda = 23;
 const int i2c_scl = 13;
@@ -214,6 +214,7 @@ void setup() {
     String server = WiFiSettings.string("mqtt_server", 64, "test.mosquitto.org", "MQTT broker");
     int port      = WiFiSettings.integer("mqtt_port", 0, 65535, 1883, "MQTT broker TCP port");
     topic_prefix  = WiFiSettings.string("snuffelaar_mqtt_prefix", "snuffelaar/", "MQTT topic prefix (ending with '/' strongly advised)");
+    interval      = 1000UL * WiFiSettings.integer("snuffelaar_interval", 1, 3600, 5, "Publish interval [s]");
     add_units     = WiFiSettings.checkbox("snuffelaar_add_units", true, "Add units of measurement to MQTT messages");
     brightness    = WiFiSettings.integer("snuffelaar_brightness", 0, 255, 80, "Brightness for startup and idle LED");
 
