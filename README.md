@@ -29,3 +29,9 @@ http://192.168.4.1/. Hint: use a smartphone or tablet.
 
 ArduinoOTA is disabled by default. It can be enabled using the portal. Don't
 forget to edit `platformio.ini` with your hostname and password.
+
+To upload:
+
+```
+pio run -t upload -e ota
+```
