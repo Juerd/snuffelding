@@ -47,6 +47,11 @@ void ledstatus_portal() {
     set_led(abs(sin(.001 * millis()) * 2*b), abs(cos(.001 * millis()) * b), 0);
 }
 
+void ledstatus_alarm() {
+    float b = brightness ? 2 * brightness : 160;
+    set_led(b, 0, 0);
+}
+
 void ledstatus_idle() {
     set_led(0, 0, 0, brightness/4);
 }
@@ -58,6 +63,7 @@ struct SnuffelSensor {
     String  id;
     String  description;
     String  topic_suffix;
+    FN      settings;
     FN      init;
     FN      prepare;
     LM      fetch;
@@ -85,6 +91,7 @@ void setup_sensors() {
             id: "DS18B20",
             description: "temperature sensor(s)",
             topic_suffix: "temperature/{index}",
+            settings: NULL,
             init: []() {
                 sensors.begin();
                 sensors.setWaitForConversion(false);
@@ -111,12 +118,16 @@ void setup_sensors() {
         static HardwareSerial hwserial(2);
         static MHZ19 mhz;
         static int rx = 22, tx = 21;
+        static int alarm_level;
 
         struct SnuffelSensor s = {
             enabled: false,  // enabled by default via WiFiSettings
             id: "MH-Z19",
             description: "CO2 sensor",
             topic_suffix: "co2",
+            settings: []() {
+                alarm_level = WiFiSettings.integer("MH-Z19_alarm", 0, 5000, 800, "CO2 warning level [PPM]");
+            },
             init: []() {
                 hwserial.begin(9600, SERIAL_8N1, rx, tx);
                 mhz.begin(hwserial);
@@ -126,8 +137,13 @@ void setup_sensors() {
             prepare: NULL,
             fetch: [](SnuffelSensor& self) {
                 int CO2 = mhz.getCO2();
-                if (CO2)
-                    self.publish(String(CO2), "PPM");
+                if (!CO2) return;
+
+                self.publish(String(CO2), "PPM");
+                if (alarm_level) {
+                    if (CO2 >= alarm_level) ledstatus_alarm();
+                    else ledstatus_idle();
+                }
             }
         };
         snuffels.push_back(s);
@@ -144,6 +160,7 @@ void setup_sensors() {
             id: "PMS7003",
             description: "dust sensor",
             topic_suffix: "dust/PM{size}",
+            settings: NULL,
             init: []() {
                 hwserial.begin(9600, SERIAL_8N1, rx, tx);
                 pms.passiveMode();
@@ -170,6 +187,7 @@ void setup_sensors() {
             id: "BME280_RH",
             description: "relative humidity sensor",
             topic_suffix: "humidity",
+            settings: NULL,
             init: []() { bme.begin(i2c_address); },
             prepare: NULL,
             fetch: [](SnuffelSensor& self) {
@@ -183,6 +201,7 @@ void setup_sensors() {
             id: "BME280_BP",
             description: "barometric pressure sensor",
             topic_suffix: "pressure",
+            settings: NULL,
             init: []() { bme.begin(i2c_address); },
             prepare: NULL,
             fetch: [](SnuffelSensor& self) {
@@ -236,6 +255,7 @@ void setup() {
         String label = "Enable " + s.id + " " + s.description;
         s.enabled = WiFiSettings.checkbox(s.id + "_enabled", true, label);
         s.topic_suffix = WiFiSettings.string(s.id + "_topic", 1, 128, s.topic_suffix, s.id + " MQTT topic suffix");
+        if (s.settings) s.settings();
     }
 
     if (ota_enabled) WiFiSettings.onPortal = setup_ota;
@@ -272,5 +292,6 @@ void loop() {
 
     while (millis() < start + interval) check_button();
 }
+
 
 
