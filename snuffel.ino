@@ -265,9 +265,7 @@ void loop() {
 
     if (ota_enabled) ArduinoOTA.handle();
 
-    while (!mqtt.connected()) {
-        if (!mqtt.connect("")) delay(500);
-    }
+    if (!mqtt.connected()) mqtt.connect("");  // ignore failures
 
     for (auto& s : snuffels) if (s.enabled && s.prepare) s.prepare();
     for (auto& s : snuffels) if (s.enabled && s.fetch)   s.fetch(s);
