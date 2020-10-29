@@ -99,6 +99,7 @@ void setup_sensors() {
                 for (int i = 0; i < 100 /* arbitrary maximum */; i++) {
                     float C = sensors.getTempCByIndex(i);
                     if (C == DEVICE_DISCONNECTED_C) break;
+                    if (C == 85) break;  // sensor returns 85.0 on errors
                     self.publish({ { "{index}", String(i) } }, String(C), "°C");
                 }
             },
