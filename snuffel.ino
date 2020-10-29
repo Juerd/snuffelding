@@ -10,6 +10,7 @@
 #include <Wire.h>
 #include <Adafruit_BME280.h>
 #include <NeoPixelBus.h>
+#include <ArduinoOTA.h>
 #include <math.h>
 #include <list>
 using namespace std;
@@ -20,6 +21,7 @@ const int i2c_sda = 23;
 const int i2c_scl = 13;
 const int ledpin = 26;
 int brightness;
+bool ota_enabled;
 
 NeoPixelBus<NeoGrbwFeature, Neo800KbpsMethod> led(1, ledpin);
 MQTTClient mqtt;
@@ -31,25 +33,22 @@ void retain(String topic, String message) {
     mqtt.publish(topic, message, true, 0);
 }
 
-void led_off() { 
-    led.ClearTo(RgbwColor(0, 0, 0, 0));
+void set_led(int r, int g, int b, int w = 0) {
+    led.ClearTo(RgbwColor(r, g, b, w));
     led.Show();
 }
 
 void ledstatus_connecting() { 
-    led.ClearTo(RgbwColor(0, 0, abs(sin(.001 * millis())*brightness), 0));
-    led.Show();
+    set_led(0, 0, abs(sin(.001 * millis())*brightness));
 }
 
 void ledstatus_portal() {
-    if (!brightness) brightness = 80;
-    led.ClearTo(RgbwColor(abs(sin(.001 * millis())*2*brightness), abs(cos(.001 * millis())*brightness), 0, 0));
-    led.Show();
+    float b = brightness ? brightness : 80;
+    set_led(abs(sin(.001 * millis()) * 2*b), abs(cos(.001 * millis()) * b), 0);
 }
 
 void ledstatus_idle() {
-    led.ClearTo(RgbwColor(0,0,0,brightness/4));
-    led.Show();
+    set_led(0, 0, 0, brightness/4);
 }
 
 #define FN function<void()>
@@ -193,6 +192,19 @@ void setup_sensors() {
     }
 }
 
+void setup_ota() {
+    ArduinoOTA.setHostname(WiFiSettings.hostname.c_str());
+    ArduinoOTA.setPassword(WiFiSettings.password.c_str());
+    ArduinoOTA.onStart(   []()              { set_led(  0,  0, 100); });
+    ArduinoOTA.onEnd(     []()              { set_led(  0, 50,   0); });
+    ArduinoOTA.onError(   [](ota_error_t e) { set_led(100,  0,   0); });
+    ArduinoOTA.onProgress([](unsigned int p, unsigned int t) {
+        static bool x; x = !x; set_led(0, 0, x*50);
+    });
+    ArduinoOTA.begin();
+
+}
+
 void check_button() {
     if (digitalRead(buttonpin)) return;
     delay(50);
@@ -207,10 +219,11 @@ void setup() {
     pinMode(buttonpin, INPUT);
 
     led.Begin();
-    led_off();
+    set_led(0, 0, 0);
 
     setup_sensors();
 
+    ota_enabled   = WiFiSettings.checkbox("snuffelaar_ota", false, "Enable remote programming through ArduinoOTA. (Uses portal password!)");
     String server = WiFiSettings.string("mqtt_server", 64, "test.mosquitto.org", "MQTT broker");
     int port      = WiFiSettings.integer("mqtt_port", 0, 65535, 1883, "MQTT broker TCP port");
     topic_prefix  = WiFiSettings.string("snuffelaar_mqtt_prefix", "snuffelaar/", "MQTT topic prefix (ending with '/' strongly advised)");
@@ -224,6 +237,8 @@ void setup() {
         s.topic_suffix = WiFiSettings.string(s.id + "_topic", 1, 128, s.topic_suffix, s.id + " MQTT topic suffix");
     }
 
+    if (ota_enabled) WiFiSettings.onPortal = setup_ota;
+
     WiFiSettings.onWaitLoop = []() {
         check_button();
         ledstatus_connecting();
@@ -231,7 +246,7 @@ void setup() {
     };
     WiFiSettings.onPortalWaitLoop = []() {
         ledstatus_portal();
-
+        if (ota_enabled) ArduinoOTA.handle();
     };
     if (!WiFiSettings.connect(false)) ESP.restart();
     ledstatus_idle();
@@ -240,10 +255,14 @@ void setup() {
 
     static WiFiClient wificlient;
     mqtt.begin(server.c_str(), port, wificlient);
+
+    if (ota_enabled) setup_ota();
 }
 
 void loop() {
     unsigned long start = millis();
+
+    if (ota_enabled) ArduinoOTA.handle();
 
     while (!mqtt.connected()) {
         if (!mqtt.connect("")) delay(500);
