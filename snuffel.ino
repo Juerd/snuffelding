@@ -59,10 +59,10 @@ void ledstatus_idle() {
 #define FN function<void()>
 #define LM function<void(SnuffelSensor&)>
 struct SnuffelSensor {
-    bool    enabled;
-    String  id;
-    String  description;
-    String  topic_suffix;
+    bool    enabled;        // default value for checkbox
+    String  id;             // used in filenames and portal
+    String  description;    // used in portal (appended to id)
+    String  topic_suffix;   // default value for input field
     FN      settings;
     FN      init;
     FN      prepare;
@@ -87,7 +87,7 @@ void setup_sensors() {
         static DallasTemperature sensors(&ds);
 
         struct SnuffelSensor s = {
-            enabled: false,  // enabled by default via WiFiSettings
+            enabled: true,
             id: "DS18B20",
             description: "temperature sensor(s)",
             topic_suffix: "temperature/{index}",
@@ -121,7 +121,7 @@ void setup_sensors() {
         static int alarm_level;
 
         struct SnuffelSensor s = {
-            enabled: false,  // enabled by default via WiFiSettings
+            enabled: true,
             id: "MH-Z19",
             description: "CO2 sensor",
             topic_suffix: "co2",
@@ -156,7 +156,7 @@ void setup_sensors() {
         static int rx = 25, tx = 32;
 
         struct SnuffelSensor s = {
-            enabled: false,  // enabled by default via WiFiSettings
+            enabled: true,
             id: "PMS7003",
             description: "dust sensor",
             topic_suffix: "dust/PM{size}",
@@ -183,7 +183,7 @@ void setup_sensors() {
         static int i2c_address = 0x76;
 
         struct SnuffelSensor rh = {
-            enabled: false,  // enabled by default via WiFiSettings
+            enabled: true,
             id: "BME280_RH",
             description: "relative humidity sensor",
             topic_suffix: "humidity",
@@ -197,7 +197,7 @@ void setup_sensors() {
         snuffels.push_back(rh);
 
         struct SnuffelSensor bp = {
-            enabled: false,  // enabled by default via WiFiSettings
+            enabled: true,
             id: "BME280_BP",
             description: "barometric pressure sensor",
             topic_suffix: "pressure",
@@ -253,7 +253,7 @@ void setup() {
 
     for (auto& s : snuffels) {
         String label = "Enable " + s.id + " " + s.description;
-        s.enabled = WiFiSettings.checkbox(s.id + "_enabled", true, label);
+        s.enabled = WiFiSettings.checkbox(s.id + "_enabled", s.enabled, label);
         s.topic_suffix = WiFiSettings.string(s.id + "_topic", 1, 128, s.topic_suffix, s.id + " MQTT topic suffix");
         if (s.settings) s.settings();
     }
