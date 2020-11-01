@@ -230,7 +230,6 @@ void setup_sensors() {
             prepare: []() {
                 while (hwserial1.available()) hwserial1.read();  // flush
                 hwserial1.write("\xff\xfe\x02\x02\x03");
-                delay(400);
             },
             fetch: [](SnuffelSensor& self) {
                 char buf[5];
