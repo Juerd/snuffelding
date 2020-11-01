@@ -25,6 +25,8 @@ bool ota_enabled;
 
 NeoPixelBus<NeoGrbwFeature, Neo800KbpsMethod> led(1, ledpin);
 MQTTClient mqtt;
+HardwareSerial hwserial1(1);
+HardwareSerial hwserial2(2);
 String topic_prefix;
 bool add_units;
 
@@ -115,7 +117,6 @@ void setup_sensors() {
     }
 
     {
-        static HardwareSerial hwserial(2);
         static MHZ19 mhz;
         static int rx = 22, tx = 21;
         static int alarm_level;
@@ -129,8 +130,8 @@ void setup_sensors() {
                 alarm_level = WiFiSettings.integer("MH-Z19_alarm", 0, 5000, 800, "CO2 warning level [PPM]");
             },
             init: []() {
-                hwserial.begin(9600, SERIAL_8N1, rx, tx);
-                mhz.begin(hwserial);
+                hwserial1.begin(9600, SERIAL_8N1, rx, tx);
+                mhz.begin(hwserial1);
                 mhz.setFilter(true, true); // Filter out erroneous readings (set to 0)
                 mhz.autoCalibration();
             },
@@ -150,8 +151,7 @@ void setup_sensors() {
     }
 
     {
-        static HardwareSerial hwserial(1);
-        static PMS pms(hwserial);
+        static PMS pms(hwserial2);
         static PMS::DATA data;
         static int rx = 25, tx = 32;
 
@@ -162,7 +162,7 @@ void setup_sensors() {
             topic_suffix: "dust/PM{size}",
             settings: NULL,
             init: []() {
-                hwserial.begin(9600, SERIAL_8N1, rx, tx);
+                hwserial2.begin(9600, SERIAL_8N1, rx, tx);
                 pms.passiveMode();
             },
             prepare: []() {
@@ -210,6 +210,46 @@ void setup_sensors() {
         };
         snuffels.push_back(bp);
     }
+
+    {
+        static int alarm_level;
+        static int rx = 22, tx = 21;
+
+        struct SnuffelSensor s = {
+            enabled: false,
+            id: "T6613",
+            description: "CO2 sensor (WARNING: not present on standard Snuffelaar kits and mutually exclusive with MH-Z19)",
+            topic_suffix: "co2",
+            settings: []() {
+                alarm_level = WiFiSettings.integer("T6613_alarm", 0, 5000, 800, "CO2 warning level [PPM]");
+            },
+            init: []() {
+                hwserial1.begin(19200, SERIAL_8N1, rx, tx);
+                hwserial1.setTimeout(100);
+            },
+            prepare: []() {
+                while (hwserial1.available()) hwserial1.read();  // flush
+                hwserial1.write("\xff\xfe\x02\x02\x03");
+                delay(400);
+            },
+            fetch: [](SnuffelSensor& self) {
+                char buf[5];
+                hwserial1.readBytes(buf, 5);
+                if (buf[0] != 0xFF || buf[1] != 0xFA || buf[2] != 2) return;
+
+                int CO2 = 256 * buf[3] + buf[4];
+                if (!CO2) return;
+                self.publish(String(CO2), "PPM");
+
+                if (alarm_level) {
+                    if (CO2 >= alarm_level) ledstatus_alarm();
+                    else ledstatus_idle();
+                }
+            }
+        };
+        snuffels.push_back(s);
+    }
+
 }
 
 void setup_ota() {
@@ -288,6 +328,7 @@ void loop() {
     if (!mqtt.connected()) mqtt.connect("");  // ignore failures
 
     for (auto& s : snuffels) if (s.enabled && s.prepare) s.prepare();
+    delay(500);
     for (auto& s : snuffels) if (s.enabled && s.fetch)   s.fetch(s);
 
     while (millis() < start + interval) check_button();
