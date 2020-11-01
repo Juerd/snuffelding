@@ -13,7 +13,7 @@ Personally I don't bother with the PlatformIO GUI at all. It's easier to just
 use it from the command line:
 
 ```
-pio run -t upload && pio device monitor
+pio run && pio device monitor
 ```
 
 ## Configuration
@@ -33,5 +33,5 @@ forget to edit `platformio.ini` with your hostname and password.
 To upload:
 
 ```
-pio run -t upload -e ota
+pio run -e ota
 ```
