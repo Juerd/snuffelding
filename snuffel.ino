@@ -9,7 +9,7 @@
 #include <MHZ19.h>
 #include <Wire.h>
 #include <Adafruit_BME280.h>
-#include "SparkFunHTU21D.h"
+#include <SparkFunHTU21D.h>
 #include <NeoPixelBus.h>
 #include <ArduinoOTA.h>
 #include <math.h>
