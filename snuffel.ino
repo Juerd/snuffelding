@@ -256,7 +256,7 @@ void setup_sensors() {
         struct SnuffelSensor s = {
             enabled: false,
             id: "HTU21D_temp",
-            description: "temperature sensor",
+            description: "temperature sensor (WARNING: not present on standard Snuffelaar kits!)",
             topic_suffix: "temperature",
             settings: NULL,
             init: []() { HTU21D_sensor.begin(); },
@@ -270,7 +270,7 @@ void setup_sensors() {
         struct SnuffelSensor rh = {
             enabled: false,
             id: "HTU21D_RH",
-            description: "relative humidity sensor",
+            description: "relative humidity sensor (WARNING: not present on standard Snuffelaar kits!)",
             topic_suffix: "humidity",
             settings: NULL,
             init: []() { HTU21D_sensor.begin(); },
