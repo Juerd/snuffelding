@@ -9,6 +9,7 @@
 #include <MHZ19.h>
 #include <Wire.h>
 #include <Adafruit_BME280.h>
+#include "SparkFunHTU21D.h"
 #include <NeoPixelBus.h>
 #include <ArduinoOTA.h>
 #include <math.h>
@@ -247,6 +248,38 @@ void setup_sensors() {
             }
         };
         snuffels.push_back(s);
+    }
+
+    {
+        static HTU21D HTU21D_sensor;
+
+        struct SnuffelSensor s = {
+            enabled: false,
+            id: "HTU21D_temp",
+            description: "temperature sensor",
+            topic_suffix: "temperature",
+            settings: NULL,
+            init: []() { HTU21D_sensor.begin(); },
+            prepare: NULL,
+            fetch: [](SnuffelSensor& self) {
+                self.publish(String(HTU21D_sensor.readTemperature()), "°C");
+            }
+        };
+        snuffels.push_back(s);
+
+        struct SnuffelSensor rh = {
+            enabled: false,
+            id: "HTU21D_RH",
+            description: "relative humidity sensor",
+            topic_suffix: "humidity",
+            settings: NULL,
+            init: []() { HTU21D_sensor.begin(); },
+            prepare: NULL,
+            fetch: [](SnuffelSensor& self) {
+                self.publish(String(HTU21D_sensor.readHumidity()), "%");
+            }
+        };
+        snuffels.push_back(rh);
     }
 
 }
