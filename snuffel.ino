@@ -30,6 +30,7 @@ HardwareSerial hwserial1(1);
 HardwareSerial hwserial2(2);
 String topic_prefix;
 bool add_units;
+int max_failures;
 
 void retain(String topic, String message) {
     Serial.printf("%s %s\n", topic.c_str(), message.c_str());
@@ -318,6 +319,7 @@ void setup() {
     ota_enabled   = WiFiSettings.checkbox("snuffelaar_ota", false, "Enable remote programming through ArduinoOTA. (Uses portal password!)");
     String server = WiFiSettings.string("mqtt_server", 64, "test.mosquitto.org", "MQTT broker");
     int port      = WiFiSettings.integer("mqtt_port", 0, 65535, 1883, "MQTT broker TCP port");
+    max_failures  = WiFiSettings.integer("snuffelaar_max_failures", 0, 1000, 10, "Maximum amount of failed subsequent MQTT connection attempts before restart");
     topic_prefix  = WiFiSettings.string("snuffelaar_mqtt_prefix", "snuffelaar/", "MQTT topic prefix (ending with '/' strongly advised)");
     interval      = 1000UL * WiFiSettings.integer("snuffelaar_interval", 1, 3600, 5, "Publish interval [s]");
     add_units     = WiFiSettings.checkbox("snuffelaar_add_units", true, "Add units of measurement to MQTT messages");
@@ -352,12 +354,25 @@ void setup() {
     if (ota_enabled) setup_ota();
 }
 
+void connect_mqtt() {
+    if (mqtt.connected()) return;  // already/still connected
+
+    static int failures = 0;
+    if (mqtt.connect("")) {
+        failures = 0;
+    } else {
+        failures++;
+        if (failures >= max_failures) ESP.restart();
+    }
+}
+
 void loop() {
     unsigned long start = millis();
 
-    if (ota_enabled) ArduinoOTA.handle();
+    connect_mqtt();
 
-    if (!mqtt.connected()) mqtt.connect("");  // ignore failures
+    mqtt.loop();
+    if (ota_enabled) ArduinoOTA.handle();
 
     for (auto& s : snuffels) if (s.enabled && s.prepare) s.prepare();
     delay(500);
@@ -365,6 +380,3 @@ void loop() {
 
     while (millis() < start + interval) check_button();
 }
-
-
-
