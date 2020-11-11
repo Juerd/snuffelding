@@ -220,10 +220,12 @@ void setup_sensors() {
         struct SnuffelSensor s = {
             enabled: false,
             id: "T6613",
-            description: "CO2 sensor (WARNING: not present on standard Snuffelaar kits and mutually exclusive with MH-Z19)",
+            description: "CO2 sensor",
             topic_suffix: "co2",
             settings: []() {
                 alarm_level = WiFiSettings.integer("T6613_alarm", 0, 5000, 800, "CO2 warning level [PPM]");
+                WiFiSettings.warning("Not present on standard Snuffelaar.");
+                WiFiSettings.warning("Mutually exclusive with MH-Z19.");
             },
             init: []() {
                 hwserial1.begin(19200, SERIAL_8N1, rx, tx);
@@ -257,9 +259,11 @@ void setup_sensors() {
         struct SnuffelSensor s = {
             enabled: false,
             id: "HTU21D_temp",
-            description: "temperature sensor (WARNING: not present on standard Snuffelaar kits!)",
+            description: "temperature sensor",
             topic_suffix: "temperature",
-            settings: NULL,
+            settings: []() {
+                WiFiSettings.warning("Not present on standard Snuffelaar.");
+            },
             init: []() { HTU21D_sensor.begin(); },
             prepare: NULL,
             fetch: [](SnuffelSensor& self) {
@@ -271,9 +275,11 @@ void setup_sensors() {
         struct SnuffelSensor rh = {
             enabled: false,
             id: "HTU21D_RH",
-            description: "relative humidity sensor (WARNING: not present on standard Snuffelaar kits!)",
+            description: "relative humidity sensor",
             topic_suffix: "humidity",
-            settings: NULL,
+            settings: []() {
+                WiFiSettings.warning("Not present on standard Snuffelaar.");
+            },
             init: []() { HTU21D_sensor.begin(); },
             prepare: NULL,
             fetch: [](SnuffelSensor& self) {
@@ -316,19 +322,30 @@ void setup() {
 
     setup_sensors();
 
+    WiFiSettings.hostname = "snuffelaar-";
     ota_enabled   = WiFiSettings.checkbox("snuffelaar_ota", false, "Enable remote programming through ArduinoOTA. (Uses portal password!)");
-    String server = WiFiSettings.string("mqtt_server", 64, "test.mosquitto.org", "MQTT broker");
-    int port      = WiFiSettings.integer("mqtt_port", 0, 65535, 1883, "MQTT broker TCP port");
-    max_failures  = WiFiSettings.integer("snuffelaar_max_failures", 0, 1000, 10, "Maximum amount of failed subsequent MQTT connection attempts before restart");
-    topic_prefix  = WiFiSettings.string("snuffelaar_mqtt_prefix", "snuffelaar/", "MQTT topic prefix (ending with '/' strongly advised)");
+    brightness    = WiFiSettings.integer("snuffelaar_brightness", 0, 255, 80, "LED brightness");
+    WiFiSettings.info("Set the brightness to 0 to disable the LED during normal operation; the default brightness will be used for the red warning signal.");
+
+
+    WiFiSettings.heading("MQTT");
+    String server = WiFiSettings.string("mqtt_server", 64, "test.mosquitto.org", "Broker");
+    int port      = WiFiSettings.integer("mqtt_port", 0, 65535, 1883, "Broker TCP port");
+    max_failures  = WiFiSettings.integer("snuffelaar_max_failures", 0, 1000, 10, "Maximum amount of failed subsequent connection attempts before restart");
+    topic_prefix  = WiFiSettings.string("snuffelaar_mqtt_prefix", "snuffelaar/", "Topic prefix (ending with '/' strongly advised)");
     interval      = 1000UL * WiFiSettings.integer("snuffelaar_interval", 1, 3600, 5, "Publish interval [s]");
-    add_units     = WiFiSettings.checkbox("snuffelaar_add_units", true, "Add units of measurement to MQTT messages");
-    brightness    = WiFiSettings.integer("snuffelaar_brightness", 0, 255, 80, "Brightness for startup and idle LED");
+    add_units     = WiFiSettings.checkbox("snuffelaar_add_units", true, "Add units of measurement to messages");
 
     for (auto& s : snuffels) {
-        String label = "Enable " + s.id + " " + s.description;
-        s.enabled = WiFiSettings.checkbox(s.id + "_enabled", s.enabled, label);
-        s.topic_suffix = WiFiSettings.string(s.id + "_topic", 1, 128, s.topic_suffix, s.id + " MQTT topic suffix");
+        String heading = s.id;
+        int underscore = heading.indexOf("_");
+        if (underscore > 0) heading.remove(underscore);
+        heading += " " + s.description;
+
+        WiFiSettings.heading(heading);
+
+        s.enabled = WiFiSettings.checkbox(s.id + "_enabled", s.enabled, "Enable");
+        s.topic_suffix = WiFiSettings.string(s.id + "_topic", 1, 128, s.topic_suffix, "MQTT topic suffix");
         if (s.settings) s.settings();
     }
 
@@ -343,6 +360,7 @@ void setup() {
         ledstatus_portal();
         if (ota_enabled) ArduinoOTA.handle();
     };
+
     if (!WiFiSettings.connect(false)) ESP.restart();
     ledstatus_idle();
 
