@@ -22,8 +22,8 @@ Snuffelding uses [ESP-WiFiSettings](https://github.com/Juerd/ESP-WiFiSettings)
 for lots of customizable settings, including WiFi network credentials and MQTT
 topics. The first time your Snuffelaar uses ESP-WiFiSettings, it will become an
 access point with a configuration portal. After that, you can get the portal
-back by pressing the portal button. Just connect to `esp-123abc` and go to
-http://192.168.4.1/. Hint: use a smartphone or tablet.
+back by pressing the portal button. Just connect to `snuffelding-123abc` and go
+to http://192.168.4.1/. Hint: use a smartphone or tablet.
 
 ## OTA
 
