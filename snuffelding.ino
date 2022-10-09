@@ -10,6 +10,7 @@
 #include <Wire.h>
 #include <Adafruit_BME280.h>
 #include <SparkFunHTU21D.h>
+#include <s8_uart.h>
 #include <NeoPixelBus.h>
 #include <ArduinoOTA.h>
 #include <math.h>
@@ -225,7 +226,7 @@ void setup_sensors() {
             settings: []() {
                 alarm_level = WiFiSettings.integer("T6613_alarm", 0, 5000, 800, "CO2 warning level [PPM]");
                 WiFiSettings.warning("Not present on standard Snuffelaar.");
-                WiFiSettings.warning("Mutually exclusive with MH-Z19.");
+                WiFiSettings.warning("Mutually exclusive with MH-Z19 and S8.");
             },
             init: []() {
                 hwserial1.begin(19200, SERIAL_8N1, rx, tx);
@@ -246,6 +247,41 @@ void setup_sensors() {
 
                 if (alarm_level) {
                     if (CO2 >= alarm_level) ledstatus_alarm();
+                    else ledstatus_idle();
+                }
+            }
+        };
+        snuffels.push_back(s);
+    }
+
+    {
+        static S8_UART *sensor_S8;
+        static S8_sensor S8;
+        static int rx = 22, tx = 21;
+        static int alarm_level;
+
+        struct SnuffelSensor s = {
+            enabled: false,
+            id: "S8",
+            description: "CO2 sensor",
+            topic_suffix: "co2",
+            settings: []() {
+                alarm_level = WiFiSettings.integer("S8_alarm", 0, 5000, 800, "CO2 warning level [PPM]");
+                WiFiSettings.warning("Not present on standard Snuffelaar.");
+                WiFiSettings.warning("Mutually exclusive with MH-Z19 and T6613.");
+            },
+            init: []() {
+                hwserial1.begin(S8_BAUDRATE, SERIAL_8N1, rx, tx);
+                sensor_S8 = new S8_UART(hwserial1);
+            },
+            prepare: NULL,
+            fetch: [](SnuffelSensor& self) {
+                S8.co2 = sensor_S8->get_co2();
+                if (!S8.co2) return;
+
+                self.publish(String(S8.co2), "PPM");
+                if (alarm_level) {
+                    if (S8.co2 >= alarm_level) ledstatus_alarm();
                     else ledstatus_idle();
                 }
             }
