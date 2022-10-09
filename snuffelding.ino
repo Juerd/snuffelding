@@ -9,7 +9,7 @@
 #include <MHZ19.h>
 #include <Wire.h>
 #include <Adafruit_BME280.h>
-#include <SparkFunHTU21D.h>
+#include <HTU21D.h>
 #include <s8_uart.h>
 #include <NeoPixelBus.h>
 #include <ArduinoOTA.h>
@@ -291,6 +291,8 @@ void setup_sensors() {
 
     {
         static HTU21D HTU21D_sensor;
+        static float curHumidity;
+        static bool lastReadSuccess;
 
         struct SnuffelSensor s = {
             enabled: false,
@@ -303,7 +305,13 @@ void setup_sensors() {
             init: []() { HTU21D_sensor.begin(); },
             prepare: NULL,
             fetch: [](SnuffelSensor& self) {
-                self.publish(String(HTU21D_sensor.readTemperature()), "°C");
+                if(HTU21D_sensor.measure()) {
+                    self.publish(String(HTU21D_sensor.getTemperature()), "°C");
+                    curHumidity = HTU21D_sensor.getHumidity();
+                    lastReadSuccess = true;
+                } else {
+                    lastReadSuccess = false;
+                }
             }
         };
         snuffels.push_back(s);
@@ -319,7 +327,9 @@ void setup_sensors() {
             init: []() { HTU21D_sensor.begin(); },
             prepare: NULL,
             fetch: [](SnuffelSensor& self) {
-                self.publish(String(HTU21D_sensor.readHumidity()), "%");
+                if(lastReadSuccess) {
+                    self.publish(String(curHumidity), "%");
+                }
             }
         };
         snuffels.push_back(rh);
