@@ -43,7 +43,7 @@ void set_led(int r, int g, int b, int w = 0) {
     led.Show();
 }
 
-void ledstatus_connecting() { 
+void ledstatus_connecting() {
     set_led(0, 0, abs(sin(.001 * millis())*brightness));
 }
 
@@ -147,6 +147,70 @@ void setup_sensors() {
                 if (alarm_level) {
                     if (CO2 >= alarm_level) ledstatus_alarm();
                     else ledstatus_idle();
+                }
+            }
+        };
+        snuffels.push_back(s);
+    }
+
+    {
+        static int rx = 22, tx = 21;
+        static int alarm_level;
+
+        struct SnuffelSensor s = {
+            enabled: true,
+            id: "AQC-0-0-0-0",
+            description: "CO2 sensor",
+            topic_suffix: "co2",
+            settings: []() {
+                alarm_level = WiFiSettings.integer("AQC_alarm", 0, 5000, 800, "CO2 warning level [PPM]");
+                WiFiSettings.warning("Not present on standard Snuffelaar.");
+                WiFiSettings.warning("Mutually exclusive with MH-Z19.");
+            },
+            init: []() {
+                hwserial1.begin(9600, SERIAL_8N1, rx, tx);
+                hwserial1.setTimeout(100);
+            },
+            prepare: NULL,
+            fetch: [](SnuffelSensor& self) {
+
+                static bool initialized = false;
+
+                const uint8_t command[9] = { 0xff, 0x01, 0xc5, 0, 0, 0, 0, 0, 0x3a };
+                uint8_t response[9];
+                int co2 = -1;
+
+                for (int attempt = 0; attempt < 3; attempt++) {
+                    int limit = 20;
+                    hwserial1.flush();  // flush output
+                    while(hwserial1.available() && --limit) hwserial1.read();  // flush input
+
+                    hwserial1.write(command, sizeof(command));
+                    delay(50);
+
+                    size_t c = hwserial1.readBytes(response, sizeof(response));
+                    if (c != sizeof(response) || response[0] != 0xff || response[1] != 0x86) {
+                        continue;
+                    }
+                    uint8_t checksum = 255;
+                    for (int i = 0; i < sizeof(response) - 1; i++) {
+                        checksum -= response[i];
+                    }
+                    if (response[8] == checksum) {
+                        co2 = response[2] * 256 + response[3];
+                        break;
+                    }
+                    delay(50);
+                }
+
+                Serial.print("CO2: ");
+                Serial.println(co2);
+                if (co2 > 0 && co2 != 400 && co2 != 9999) {
+                    self.publish(String(co2), "PPM");
+                    if (alarm_level) {
+                        if (co2 >= alarm_level) ledstatus_alarm();
+                        else ledstatus_idle();
+                    }
                 }
             }
         };
