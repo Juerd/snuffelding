@@ -11,6 +11,7 @@
 #include <Adafruit_BME280.h>
 #include <HTU21D.h>
 #include <s8_uart.h>
+#include <AHTxx.h>
 #include <NeoPixelBus.h>
 #include <ArduinoOTA.h>
 #include <math.h>
@@ -329,6 +330,48 @@ void setup_sensors() {
             fetch: [](SnuffelSensor& self) {
                 if(lastReadSuccess) {
                     self.publish(String(curHumidity), "%");
+                }
+            }
+        };
+        snuffels.push_back(rh);
+    }
+
+    {
+        static AHTxx aht20(AHTXX_ADDRESS_X38, AHT2x_SENSOR);
+
+        struct SnuffelSensor s = {
+            enabled: false,
+            id: "AHT2x_temp",
+            description: "temperature sensor",
+            topic_suffix: "temperature",
+            settings: []() {
+                WiFiSettings.warning("Not present on standard Snuffelaar.");
+            },
+            init: []() { aht20.begin(); },
+            prepare: NULL,
+            fetch: [](SnuffelSensor& self) {
+                float ahtValue = aht20.readTemperature();
+                if (ahtValue != AHTXX_ERROR) {
+                    self.publish(String(ahtValue), "°C");
+                }
+            }
+        };
+        snuffels.push_back(s);
+
+        struct SnuffelSensor rh = {
+            enabled: false,
+            id: "AHT2x_RH",
+            description: "relative humidity sensor",
+            topic_suffix: "humidity",
+            settings: []() {
+                WiFiSettings.warning("Not present on standard Snuffelaar.");
+            },
+            init: []() { aht20.begin(); },
+            prepare: NULL,
+            fetch: [](SnuffelSensor& self) {
+                float ahtValue = aht20.readHumidity();
+                if (ahtValue != AHTXX_ERROR) {
+                    self.publish(String(ahtValue), "%");
                 }
             }
         };
